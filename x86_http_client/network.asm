@@ -178,7 +178,7 @@ createReq:
     
     mov     ecx, eax            ; save the length in ecx
     mov     eax, request1       ; move the first part of the request again
-    mov     [request1], 
+    mov     [request1], ecx     ; move the 
 
     pop     edi
     pop     ecx
