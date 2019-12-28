@@ -9,9 +9,8 @@ domainPrint db 'Domain: ', 0x0          ; Domain print label
 portPrint   db 'Port: ', 0x0            ; Port print label
 
 SECTION .bss
-input   resb 255,                   ; Input memory 
-domain  resb 4                      ; Domain after ntohs
-port    resb 2                      ; Port number
+domain  resb 255,                      ; Domain after ntohs
+port    resb 8                      ; Port number
 
 SECTION .text
 global _start
@@ -37,37 +36,30 @@ incorrectUsage:
 
 continue:
     ; Load and print the values
-    pop     ebx             ; pop the first argument (the domain)
-    mov     [input], ebx    ; move the value in ebx into the input .bss
+    pop     ebx                 ; pop the first argument (the domain)
+    mov     [domain], ebx       ; move the value in ebx into the domain .bss
 
     mov     eax, domainPrint    ; move the domainPrint string into eax to print
     call    sprint
 
-    mov     eax, [input]    ; move the input variable address into eax
-    call    sprintLF        ; print the domain variable with line feed
+    mov     eax, [domain]       ; move the input variable address into eax
+    call    sprintLF            ; print the domain variable with line feed
 
     mov     eax, domainPrint
     call    sprint
 
-    mov     eax, [input]    ; move the domain variable address into eax
-    call    ntohs           ; convert domain string into integer
+    pop     ebx                 ; pop the second argument (the port)
+    mov     [port], ebx         ; move the value in ebx into the port .bss
 
-    mov     [domain], eax   ; move the converted domain into the domain memory section
-
-    pop     ebx             ; pop the second argument (the port)
-    mov     [input], ebx    ; move the value in ebx into the input .bss
-
-    mov     eax, portPrint  ; move the portPrint string into eax to print
+    mov     eax, portPrint      ; move the portPrint string into eax to print
     call    sprint
 
-    mov     eax, [input]    ; move the port variable address into eax
-    call    sprintLF        ; print the domain variable with the line feed
+    mov     eax, [port]         ; move the port variable address into eax
+    call    sprintLF            ; print the port variable with the line feed
 
-    mov     eax, [input]
-    call    atoi            ; conver the result into a integer
-    
-    shl     eax, 8          ; make the port network compatible
-    mov     [port], eax     ; move the value in eax into the port memory
+    mov     eax, [domain]       ; move the domain into eax
+    mov     ebx, [port]         ; move the port into ebx
+    call    printReq            ; print the request
 
     call    quit
     

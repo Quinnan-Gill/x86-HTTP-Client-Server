@@ -5,7 +5,7 @@
 
 SECTION .data
 ; our request strings
-request1 db 'GET / HTTP/1.1', 0x0d, 0x0a, 'Host: '
+request1 db 'GET / HTTP/1.1', 0x0d, 0x0a, 'Host: ', 0x0
 request2 db ':', 0x0
 request3 db 0x0d, 0x0a, 0x0d, 0x0a, 0x0
 
@@ -164,27 +164,82 @@ connect:
     ret
 
 ;------------------------------------------
+; int moveToMem(String phrase, int offset)
+; Takes a string and loads it into the request bss section
+moveToMem:
+    push    edx                     ; save registers
+    push    ecx
+    push    esi
+
+    mov     esi, eax                ; move the phrase string from eax into esi
+    mov     ecx, 0                  ; move zero into esi (the string counter)
+
+.memCopyLoop:
+    xor     edx, edx                ; resets both lower and upper bytes of 
+    mov     dl, [esi+ecx]           ; move a single byte into edx register's lower half
+    cmp     dl, 0x0                 ; compare edx register's lower half value against ascii value 0 (null byte)
+    je     .finished               ; if null byte is encountered then finish execution
+    mov     [request+ebx+ecx], dl   ; move the character byte in edx register's lower half into 
+                                    ; the request memory address + the ebx offset + character position
+    inc     ecx                     ; increment ecx by 1
+    jmp     .memCopyLoop            ; loop back up
+
+.finished:
+    mov     eax, ebx                ; move the ebx offset into eax
+    add     eax, ecx                ; add the number of characters passed to the offset
+                                    ; this returns the new offset
+    pop     esi                     ; reset registers
+    pop     edx
+    pop     ecx
+    ret
+
+;------------------------------------------
 ; void createReq(String domain, String port)
 ; Takes the domain and port and loads it into the resquest memory address
 createReq:
     push    edx
     push    ecx
-    push    edi
 
-    mov     edi, eax            ; move the value in eax to edi
+    mov     ecx, eax            ; move eax (domain string) into ecx for later
+    mov     edx, ebx            ; move edx (port string) into edx for later
     
-    mov     eax, request1       ; move the first part of the request to eax
-    call    slen                ; get length of request1
-    
-    mov     ecx, eax            ; save the length in ecx
-    mov     eax, request1       ; move the first part of the request again
-    mov     [request1], ecx     ; move the 
+    mov     eax, request1       ; move the first part of the request into the eax register
+    mov     ebx, 0              ; move the offset 0 into the ebx register
+    call    moveToMem           ; call moveToMem putting request1 into request bss
 
-    pop     edi
+    mov     ebx, eax            ; move the new offset (in return address eax) into ebx
+    mov     eax, ecx            ; move the domain (in ecx) into eax
+    call    moveToMem           ; call moveToMem appending the domain to the request bss
+
+    mov     ebx, eax            ; move the new offset (in return address eax) into ebx
+    mov     eax, request2       ; move the second part of the request into the eax register
+    call    moveToMem           ; call moveToMem appending request2 onto the request bss
+
+    mov     ebx, eax            ; mov the new offset (in return address eax) into ebx
+    mov     eax, edx            ; move the port (in edx) into eax
+    call    moveToMem           ; call moveToMem appending the port to the request bss
+
+    mov     ebx, eax            ; move the new offset (in return address eax) into ebx
+    mov     eax, request3       ; move the final part of the request into the eax register
+    call    moveToMem           ; call moveToMem appending request3 onto the request bss
+
+    mov     ecx, 0x0            ; move the null byte into ecx
+    mov     [request+eax], ecx  ; append the null byte into the final position
+
     pop     ecx
     pop     edx
     ret
 
+;------------------------------------------
+; void printReq(String domain, String port)
+; Takes the domain and port and loads it into the resquest memory address
+printReq:
+    call    createReq       ; since the domain and and port are already in eax and ebx respectively, 
+                            ; it is prepared for createReq
+    mov     eax, request    ; move the request into eax
+    call    sprintLF        ; print the request with linefeed
+
+    ret
 
 ;------------------------------------------
 ; int writeReq(socket_t fd, String domain, String port)
