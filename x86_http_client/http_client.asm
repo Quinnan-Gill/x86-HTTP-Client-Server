@@ -8,6 +8,8 @@ usage2      db ' [DOMAIN] [PORT]', 0x0  ; Usage message ending
 domainPrint db 'Domain: ', 0x0          ; Domain print label
 portPrint   db 'Port: ', 0x0            ; Port print label
 
+errorMsg    db 'ERROR', 0x0
+
 SECTION .bss
 domain  resb 255,                      ; Domain after ntohs
 port    resb 8                      ; Port number
@@ -60,6 +62,34 @@ continue:
     mov     eax, [domain]       ; move the domain into eax
     mov     ebx, [port]         ; move the port into ebx
     call    printReq            ; print the request
-
-    call    quit
     
+    call    socket              ; create the socket
+    cmp     eax, 0              ; compare eax (file descriptor) to zero 
+    jl      .badExit            ; if less than zero there is an error
+
+    mov     edi, eax            ; move the socket file descriptor (in eax) into edi
+
+    mov     eax, edi            ; move the socket file descriport (in edi) into eax
+    mov     ebx, [domain]       ; move the domain into ebx
+    mov     ecx, [port]         ; move the port into ecx
+    call    connect             ; call connect
+    cmp     eax, 0              ; compare eax (file descriptor) to zero 
+    jl      .badExit            ; if less than zero there is an error
+
+    mov     eax, edi            ; move the socket file descriport (in edi) into eax
+    mov     ebx, [domain]       ; move the domain into ebx
+    mov     ecx, [port]         ; move the port into ecx
+    call    writeReq            ; call writeReq 
+    cmp     eax, 0              ; compare eax (file descriptor) to zero 
+    jl      .badExit            ; if less than zero there is an error
+
+    mov     eax, edi            ; move the socket file descriport (in edi) into eax
+    call    readHttp            ; call readHttp
+
+    jmp     .goodExit
+.badExit:
+    mov     eax, errorMsg
+    call    sprintLF
+
+.goodExit:
+    call quit

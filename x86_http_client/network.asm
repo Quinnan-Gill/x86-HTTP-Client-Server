@@ -12,6 +12,7 @@ request3 db 0x0d, 0x0a, 0x0d, 0x0a, 0x0
 SECTION .bss
 octal   resb 4      ; the octal strings for each division of the ip address
 request resb 255,   ; the memory segment with the completed address
+buffer  resb 2,     ; variable store response
 
 SECTION .text
 ;------------------------------------------
@@ -126,9 +127,29 @@ socket:
     mov     eax, 102    ; invoke SYS_SOCKETCALL (kernel opcode 102)
     int     0x80        ; call the kernel 
 
-    pop     esi
+    pop     ebx         ; remove all the pushed bytes
     pop     ebx
+    pop     ebx 
+
+    pop     ebx         ; reset registers
     pop     ecx
+    ret
+
+;------------------------------------------
+; int portFlip(int port)
+; Flips the bytes of the port value
+portFlip:
+    push    ebx
+
+    mov     ebx, eax    ; mov eax (the port) into ebx
+    and     ebx, 0xff   ; mask the lower byte of ebx
+    shl     ebx, 8      ; shift ebx by a byte to the left
+
+    shr     eax, 8      ; shift eax by a byte to the right
+    and     eax, 0xff   ; mask the lower byte of eax
+    or      eax, ebx    ; or the upper ebx to lower eax
+    
+    pop     ebx
     ret
 
 ;------------------------------------------
@@ -146,6 +167,8 @@ connect:
     push    dword eax           ; push domain onto the stack using ebx for IP ADDRESS (reverse byte order)
 
     mov     eax, ecx            ; move the port string in ecx into the eax register
+    call    atoi                ; convert the eax
+    call    portFlip            ; ntohs the port value
     push    word ax             ; push the 16 part of eax (ax) onto stack for the PORT (reverse byte order)
 
     push    word 2              ; push 2 dec onto stack AF_INET
@@ -158,9 +181,15 @@ connect:
     mov     eax, 102            ; invoke SYS_SOCKETCALL (kerenl opcode 102)
     int     0x80                ; call the kernel
 
-    pop    edi
-    pop    esi
+    pop     edi                 ; edi was pushed now lets pop
+    pop     ecx                 ; ecx was pushed now lets pop
+    pop     byte edx            ; pop the byte 16 into edx register's lower half
+    pop     edx                 ; pop the words for 2 and port into edx
+    pop     edx                 ; pop the domain into edx
+
     pop    edx
+    pop    esi
+    pop    edi
     ret
 
 ;------------------------------------------
@@ -189,12 +218,12 @@ moveToMem:
     add     eax, ecx                ; add the number of characters passed to the offset
                                     ; this returns the new offset
     pop     esi                     ; reset registers
-    pop     edx
     pop     ecx
+    pop     edx
     ret
 
 ;------------------------------------------
-; void createReq(String domain, String port)
+; int createReq(String domain, String port)
 ; Takes the domain and port and loads it into the resquest memory address
 createReq:
     push    edx
@@ -225,6 +254,7 @@ createReq:
 
     mov     ecx, 0x0            ; move the null byte into ecx
     mov     [request+eax], ecx  ; append the null byte into the final position
+    inc     eax
 
     pop     ecx
     pop     edx
@@ -248,15 +278,68 @@ writeReq:
     push    edx 
     push    edi
     
-    mov     edi, eax            ; store the value in eax (the socket pointer) in edi
+    mov     edi, eax        ; store the value in eax (the socket pointer) in edi
     
-    mov     eax, request1       ; move the first part of the request into the 
+    mov     eax, ebx        ; move the domain (in ebx) into eax
+    mov     ebx, ecx        ; move the port (in ecx) into ebx
+    call    createReq       ; create the request (eax is )
 
-    mov     edx, 43             ; move 43 dec into edx (length in bytes to write)
-    mov     ecx, request        ; 
+    mov     edx, eax        ; move the length of the request into from the createReq into edx
+    mov     ecx, request    ; move address of our request variable into ecx
+    mov     ebx, edi        ; move file descriptor into ebx (created socket file descriptor)
+    mov     eax, 4          ; invoke SYS_WRITE (kernel opcode 4)
+    int     0x80            ; call the kernel 
 
     pop     edi
     pop     edx 
     ret
 
+;------------------------------------------
+; void readHttp(socket_t fd)
+; Reads the data from http get request
+readHttp:
+    push    edi
+    push    edx
+    push    ecx
+    push    ebx
+    
+    mov     edi, eax        ; move the argument in eax (the file descriptor into edi)
+    
+.httpReadLoop:
+    mov     edx, 1          ; number of bytes to read (we will read 1 byte at a time)
+    mov     ecx, buffer     ; move the memory address of our buffer variable into ecx
+    mov     ebx, edi        ; move edi into ebx (created socket file descriptor)
+    mov     eax, 3          ; invoke SYS_READ (kernel opcode 3)
+    int     0x80            ; call the kernel
+
+    cmp     eax, 0          ; if return value of SYS_READ in eax is zero 
+    jz      .finished       ; jmp to .finished if we have reached the end of the file (zero flag set)
+
+    mov     eax, buffer     ; move the memory address of our buffer variable into eax printing
+    call    sprint          ; call our string printing function
+    jmp     .httpReadLoop   ; go back over the loop
+
+.finished:
+    call    closeSocket ; close the socket
+
+    pop     ebx
+    pop     ecx
+    pop     edx
+    pop     edi 
+    ret
+
+;------------------------------------------
+; void close(socke_t fd)
+; Closes the created socket file descriptor
+closeSocket:
+    push    edi
+    push    ebx
+
+    mov     ebx, edi    ; move edi into ebx (connected socket file descriptor)
+    mov     eax, 6      ; invoke SYS_CLOSE (kernel opcode 6)
+    int     0x80        ; call the kernel
+
+    pop     ebx
+    pop     edi
+    ret
 %endif
